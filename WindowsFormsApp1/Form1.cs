@@ -119,7 +119,11 @@ namespace WindowsFormsApp1
             }
 
             List<List<string>> giniDataset = ConvertToNumericWithGini(lst, atrs);
-            List<List<string>> twoingDataset = ConvertToNumericWithTwoing();
+            giniDataset = ChangeBackNumericalColumns(giniDataset);
+            giniDataset = Arrange2CategoricalColumns(giniDataset);
+            List <List<string>> twoingDataset = ConvertToNumericWithTwoing(lst, atrs);
+            twoingDataset = ChangeBackNumericalColumns(twoingDataset);
+            twoingDataset = Arrange2CategoricalColumns(twoingDataset);
         }
 
         public List<List<string>> ConvertToNumericWithGini(List<List<string>> lst, List<List<string>> atrs)
@@ -131,14 +135,14 @@ namespace WindowsFormsApp1
             int totalInst = lst.Count;
             int columnNum = lst[0].Count;
 
-            for (int i = 0; i < columnNum - 1; i++) // fill the table
+            for (int i = 0; i < columnNum - 1; i++) 
             {
                 List<string> giniScores = new List<string>();
                 int atrNum = atrs[i].Count;
                 List<string> columnAtrs = atrs[i];
                 int[,] allCounts = new int[targetAtrNum, atrNum * 2];
 
-                for (int j = 0; j < totalInst; j++)
+                for (int j = 0; j < totalInst; j++) // fill the table
                 {
                     int k = targetAtrs.IndexOf(lst[j][columnNum - 1]);
                     int l = columnAtrs.IndexOf(lst[j][i]) * 2;
@@ -188,25 +192,80 @@ namespace WindowsFormsApp1
             return numericDataset;
         }
 
-        public List<List<string>> ConvertToNumericWithTwoing()
+        public List<List<string>> ConvertToNumericWithTwoing(List<List<string>> lst, List<List<string>> atrs)
         {
-            return new List<List<string>>();
+            List<List<string>> numericDataset = new List<List<string>>();
+            List<string> targetCol = new List<string>();
+            int targetAtrNum = atrs[atrs.Count - 1].Count;
+            List<string> targetAtrs = atrs[atrs.Count - 1];
+            int totalInst = lst.Count;
+            int columnNum = lst[0].Count;
+
+            for (int i = 0; i < columnNum - 1; i++) 
+            {
+                int atrNum = atrs[i].Count;
+                int[] table = new int[atrNum + (atrs[i].Count * targetAtrNum)];
+                int[] atrCount = new int[atrNum];
+                int[] targetCount = new int[targetAtrNum];
+                List<string> columnAtrs = atrs[i];
+                List<string> twoingScores = new List<string>();
+
+                for (int j = 0; j < totalInst; j++) // fill the table
+                {
+                    int k = targetAtrs.IndexOf(lst[j][columnNum - 1]);
+                    int l = columnAtrs.IndexOf(lst[j][i]);
+
+                    table[l * (targetAtrNum + 1)]++;
+                    table[(l * (targetAtrNum + 1)) + (k + 1)]++;
+                    targetCount[k]++;
+                    atrCount[l]++;
+
+                    targetCol.Add(lst[j][columnNum - 1]);
+                }
+
+                for (int j = 0; j < totalInst; j++) // calculate twoing
+                {
+                    int k = targetAtrs.IndexOf(lst[j][columnNum - 1]);
+                    int l = columnAtrs.IndexOf(lst[j][i]);
+
+                    double pLeft = Convert.ToDouble(table[l * (targetAtrNum + 1)]) / Convert.ToDouble(totalInst);
+                    double pRight = Convert.ToDouble((totalInst - table[l * (targetAtrNum + 1)])) / Convert.ToDouble(totalInst);
+
+                    double total = 0;
+
+                    for (int x = 1; x < targetAtrNum  + 1; x++)
+                    {
+                        double pTLeft = Convert.ToDouble(table[l * (targetAtrNum + 1) + x] / Convert.ToDouble(table[l * (targetAtrNum + 1)]));
+                        double pTRight = Convert.ToDouble(targetCount[k] - table[l * (targetAtrNum + 1) + x]) / Convert.ToDouble((totalInst - table[l * (targetAtrNum + 1)]));
+                        total = total + Math.Abs(pTLeft - pTRight);
+                            
+                    }
+
+                    double q = 2 * pLeft * pRight * total;
+                    twoingScores.Add(q.ToString());
+                }
+
+                numericDataset.Add(twoingScores);
+            }
+
+            numericDataset.Add(targetCol);
+
+            return numericDataset;
         }
 
-        public void ChangeBackNumericalColumns()
+        public List<List<string>> ChangeBackNumericalColumns(List<List<string>> numericDataset)
         {
-
+            return numericDataset;
         }
 
-        public void Arrange2CategoricalColumns()
+        public List<List<string>> Arrange2CategoricalColumns(List<List<string>> numericDataset)
         {
-
+            return numericDataset;
         }
 
         public void WriteFile()
         {
 
         }
-
     }
 }
