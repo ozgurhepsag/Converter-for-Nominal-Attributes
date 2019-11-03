@@ -1,13 +1,8 @@
-﻿using System;
+﻿using java.util;
+using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.IO;
 using System.Windows.Forms;
-using weka.core.converters;
 
 namespace WindowsFormsApp1
 {
@@ -50,22 +45,28 @@ namespace WindowsFormsApp1
 
         public void PrepareDataset()
         {
+            weka.filters.Filter missingFilter = new weka.filters.unsupervised.attribute.ReplaceMissingValues(); // missing values handled
+            missingFilter.setInputFormat(insts);
+            insts = weka.filters.Filter.useFilter(insts, missingFilter);
+
+            bool isTargetNumeric = insts.attribute(insts.numAttributes() - 1).isNumeric();
             List<bool> isNumeric = new List<bool>();
-            List<bool> isMultiCategorigal = new List<bool>();
+            List<bool> is2Categorical = new List<bool>();
             List<List<string>> numericColumns = new List<List<string>>();
+            List<string> atrNames = new List<string>();
 
             for (int i = 0; i < insts.numAttributes(); i++)
             {
+                atrNames.Add(insts.attribute(i).name());
                 bool isNum = insts.attribute(i).isNumeric();
                 isNumeric.Add(isNum);
 
-                if(isNum == true)
+                if (isNum == true)
                 {
                     numericColumns.Add(new List<string>());
 
                     for (int j = 0; j < insts.numInstances(); j++)
                     {
-                        //Console.WriteLine(insts.instance(j).toString(i));
                         numericColumns[numericColumns.Count - 1].Add(insts.instance(j).toString(i));
                     }
                 }
@@ -86,18 +87,12 @@ namespace WindowsFormsApp1
                     string sub_category = insts.attribute(i).value(j);
                     string temp = sub_category.Replace("'", string.Empty);
                     atrs[atrs.Count - 1].Add(temp);
-                    //Console.Write(sub_category);
                 }
 
-                if(atrs[atrs.Count - 1].Count == 2)
-                {
-                    isMultiCategorigal.Add(true);
-                }
+                if (atrs[atrs.Count - 1].Count == 2)
+                    is2Categorical.Add(true);
                 else
-                {
-                    isMultiCategorigal.Add(false);
-                }
-                //Console.WriteLine(atrs[atrs.Count - 1].Count);
+                    is2Categorical.Add(false);
             }
 
             List<List<string>> lst = new List<List<string>>();
@@ -112,18 +107,20 @@ namespace WindowsFormsApp1
                     temp = temp.Replace("\\", string.Empty);
                     temp = temp.Replace("'", string.Empty);
                     lst[lst.Count - 1].Add(temp);
-                
-                    //Console.Write(temp + " ");
                 }
-                //Console.WriteLine();
             }
 
+            List<string> targetValues = atrs[insts.numAttributes() - 1];
+
             List<List<string>> giniDataset = ConvertToNumericWithGini(lst, atrs);
-            giniDataset = ChangeBackNumericalColumns(giniDataset);
-            giniDataset = Arrange2CategoricalColumns(giniDataset);
-            List <List<string>> twoingDataset = ConvertToNumericWithTwoing(lst, atrs);
-            twoingDataset = ChangeBackNumericalColumns(twoingDataset);
-            twoingDataset = Arrange2CategoricalColumns(twoingDataset);
+            giniDataset = Arrange2CategoricalColumns(giniDataset, lst, is2Categorical);
+            giniDataset = ChangeBackNumericalColumns(giniDataset, numericColumns, isNumeric);
+            WriteFile(giniDataset, "numeric_gini.arff", atrNames, targetValues, isTargetNumeric);
+
+            List<List<string>> twoingDataset = ConvertToNumericWithTwoing(lst, atrs);
+            twoingDataset = Arrange2CategoricalColumns(twoingDataset, lst, is2Categorical);
+            twoingDataset = ChangeBackNumericalColumns(twoingDataset, numericColumns, isNumeric);
+            WriteFile(twoingDataset, "numeric_twoing.arff", atrNames, targetValues, isTargetNumeric);
         }
 
         public List<List<string>> ConvertToNumericWithGini(List<List<string>> lst, List<List<string>> atrs)
@@ -135,7 +132,7 @@ namespace WindowsFormsApp1
             int totalInst = lst.Count;
             int columnNum = lst[0].Count;
 
-            for (int i = 0; i < columnNum - 1; i++) 
+            for (int i = 0; i < columnNum - 1; i++)
             {
                 List<string> giniScores = new List<string>();
                 int atrNum = atrs[i].Count;
@@ -149,10 +146,9 @@ namespace WindowsFormsApp1
                     allCounts[k, l]++;
                     for (int x = 1; x < atrNum * 2; x = x + 2)
                     {
-                        if(x != l + 1)
+                        if (x != l + 1)
                             allCounts[k, x]++;
                     }
-                    targetCol.Add(lst[j][columnNum - 1]);
                 }
 
                 for (int j = 0; j < totalInst; j++) // calculate gini from table
@@ -164,7 +160,7 @@ namespace WindowsFormsApp1
 
                     for (int x = 0; x < allCounts.GetLength(0); x++)
                     {
-                        denominatorL = allCounts[x,l] + denominatorL;
+                        denominatorL = allCounts[x, l] + denominatorL;
                     }
                     denominatorR = totalInst - denominatorL;
 
@@ -187,6 +183,11 @@ namespace WindowsFormsApp1
                 numericDataset.Add(giniScores);
             }
 
+            for (int i = 0; i < totalInst; i++)
+            {
+                targetCol.Add(lst[i][columnNum - 1]);
+            }
+
             numericDataset.Add(targetCol);
 
             return numericDataset;
@@ -201,7 +202,7 @@ namespace WindowsFormsApp1
             int totalInst = lst.Count;
             int columnNum = lst[0].Count;
 
-            for (int i = 0; i < columnNum - 1; i++) 
+            for (int i = 0; i < columnNum - 1; i++)
             {
                 int atrNum = atrs[i].Count;
                 int[] table = new int[atrNum + (atrs[i].Count * targetAtrNum)];
@@ -219,8 +220,6 @@ namespace WindowsFormsApp1
                     table[(l * (targetAtrNum + 1)) + (k + 1)]++;
                     targetCount[k]++;
                     atrCount[l]++;
-
-                    targetCol.Add(lst[j][columnNum - 1]);
                 }
 
                 for (int j = 0; j < totalInst; j++) // calculate twoing
@@ -233,12 +232,12 @@ namespace WindowsFormsApp1
 
                     double total = 0;
 
-                    for (int x = 1; x < targetAtrNum  + 1; x++)
+                    for (int x = 1; x < targetAtrNum + 1; x++)
                     {
                         double pTLeft = Convert.ToDouble(table[l * (targetAtrNum + 1) + x] / Convert.ToDouble(table[l * (targetAtrNum + 1)]));
                         double pTRight = Convert.ToDouble(targetCount[k] - table[l * (targetAtrNum + 1) + x]) / Convert.ToDouble((totalInst - table[l * (targetAtrNum + 1)]));
                         total = total + Math.Abs(pTLeft - pTRight);
-                            
+
                     }
 
                     double q = 2 * pLeft * pRight * total;
@@ -248,23 +247,98 @@ namespace WindowsFormsApp1
                 numericDataset.Add(twoingScores);
             }
 
+            for (int i = 0; i < totalInst; i++)
+            {
+                targetCol.Add(lst[i][columnNum - 1]);
+            }
+
             numericDataset.Add(targetCol);
 
             return numericDataset;
         }
 
-        public List<List<string>> ChangeBackNumericalColumns(List<List<string>> numericDataset)
+        public List<List<string>> Arrange2CategoricalColumns(List<List<string>> numericDataset, List<List<string>> lst, List<bool> is2Categorical)
         {
+
+            for (int i = 0; i < numericDataset.Count; i++)
+            {
+                if (is2Categorical[i] == true && i != numericDataset.Count - 1)
+                {
+                    string temp = lst[0][i];
+                    for (int j = 0; j < numericDataset[i].Count; j++)
+                    {
+                        if (lst[j][i] == temp) // change to dummy attribute
+                            numericDataset[i][j] = "1";
+                        else
+                            numericDataset[i][j] = "0";
+                    }
+                }
+            }
+
             return numericDataset;
         }
 
-        public List<List<string>> Arrange2CategoricalColumns(List<List<string>> numericDataset)
+        public List<List<string>> ChangeBackNumericalColumns(List<List<string>> numericDataset, List<List<string>> numericColumns, List<bool> isNumeric)
         {
+            int numericColumnIndex = 0;
+
+            for (int i = 0; i < numericDataset.Count; i++)
+            {
+                if (isNumeric[i] == true)
+                {
+                    numericDataset[i] = numericColumns[numericColumnIndex];
+                    numericColumnIndex++;
+                }
+            }
+
             return numericDataset;
         }
 
-        public void WriteFile()
+        public void WriteFile(List<List<string>> numericDataset, string file, List<string> atrNames, List<string> targetValues, bool isTargetNumeric)
         {
+            weka.core.FastVector targetVals = new weka.core.FastVector();
+            
+            weka.core.Instances dataRel;
+
+            for (int i = 0; i < targetValues.Count; i++)
+                targetVals.addElement(targetValues[i]);
+
+            weka.core.Instances data;
+            weka.core.FastVector atts = new weka.core.FastVector();
+
+            for (int j = 0; j < insts.numAttributes(); j++)
+            {
+
+                if (j == insts.numAttributes() - 1 && isTargetNumeric == false) // target value can be nominal
+                    atts.addElement(new weka.core.Attribute(atrNames[j], targetVals));
+                else
+                    atts.addElement(new weka.core.Attribute(atrNames[j]));
+            }
+
+            data = new weka.core.Instances("MyRelation", atts, 0);
+
+            for (int i = 0; i < insts.numInstances(); i++)
+            {
+                double[] vals = new double[insts.numAttributes()];
+
+                for (int j = 0; j < insts.numAttributes(); j++)
+                {
+                    if (j == insts.numAttributes() - 1 && isTargetNumeric == false) // target value can be nominal
+                        vals[j] = targetVals.indexOf(numericDataset[j][i]);      
+                    else
+                        vals[j] = Convert.ToDouble(numericDataset[j][i]);
+                }
+
+                data.add(new weka.core.DenseInstance(1.0, vals));
+            }
+
+            if (File.Exists(file)) 
+                File.Delete(file);
+
+            var saver = new weka.core.converters.ArffSaver();
+            saver.setInstances(data);
+            saver.setFile(new java.io.File(file));
+            saver.writeBatch();
 
         }
     }
