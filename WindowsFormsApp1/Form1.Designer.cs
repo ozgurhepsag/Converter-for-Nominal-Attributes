@@ -75,7 +75,7 @@
             this.ClientSize = new System.Drawing.Size(841, 111);
             this.Controls.Add(this.groupBoxInput);
             this.Name = "Form1";
-            this.Text = "ML Classsification Tool";
+            this.Text = "Nominal to Numeric Converter";
             this.groupBoxInput.ResumeLayout(false);
             this.groupBoxInput.PerformLayout();
             this.ResumeLayout(false);

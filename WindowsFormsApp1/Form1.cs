@@ -9,6 +9,7 @@ namespace WindowsFormsApp1
     public partial class Form1 : Form
     {
         private static weka.core.Instances insts;
+        string filename;
 
         public Form1()
         {
@@ -38,89 +39,110 @@ namespace WindowsFormsApp1
             if (openFileDialog1.ShowDialog() == DialogResult.OK)
             {
                 browseFileName.Text = openFileDialog1.FileName;
+                filename = Path.GetFileNameWithoutExtension(openFileDialog1.FileName);
                 insts = new weka.core.Instances(new java.io.FileReader(browseFileName.Text));
-                PrepareDataset();
+
+                if (PrepareDataset())
+                {
+                    var formPopup = new Form2();
+                    formPopup.Show(this);
+                }
+                else
+                {
+                    var formPopup = new Form3();
+                    formPopup.Show(this);
+                }
+
             }
         }
 
-        public void PrepareDataset()
+        public bool PrepareDataset()
         {
-            weka.filters.Filter missingFilter = new weka.filters.unsupervised.attribute.ReplaceMissingValues(); // missing values handled
-            missingFilter.setInputFormat(insts);
-            insts = weka.filters.Filter.useFilter(insts, missingFilter);
-
-            bool isTargetNumeric = insts.attribute(insts.numAttributes() - 1).isNumeric();
-            List<bool> isNumeric = new List<bool>();
-            List<bool> is2Categorical = new List<bool>();
-            List<List<string>> numericColumns = new List<List<string>>();
-            List<string> atrNames = new List<string>();
-
-            for (int i = 0; i < insts.numAttributes(); i++)
+            try
             {
-                atrNames.Add(insts.attribute(i).name());
-                bool isNum = insts.attribute(i).isNumeric();
-                isNumeric.Add(isNum);
+                weka.filters.Filter missingFilter = new weka.filters.unsupervised.attribute.ReplaceMissingValues(); // missing values handled
+                missingFilter.setInputFormat(insts);
+                insts = weka.filters.Filter.useFilter(insts, missingFilter);
 
-                if (isNum == true)
+                bool isTargetNumeric = insts.attribute(insts.numAttributes() - 1).isNumeric();
+                List<bool> isNumeric = new List<bool>();
+                List<bool> is2Categorical = new List<bool>();
+                List<List<string>> numericColumns = new List<List<string>>();
+                List<string> atrNames = new List<string>();
+
+                for (int i = 0; i < insts.numAttributes(); i++)
                 {
-                    numericColumns.Add(new List<string>());
+                    atrNames.Add(insts.attribute(i).name());
+                    bool isNum = insts.attribute(i).isNumeric();
+                    isNumeric.Add(isNum);
 
-                    for (int j = 0; j < insts.numInstances(); j++)
+                    if (isNum == true)
                     {
-                        numericColumns[numericColumns.Count - 1].Add(insts.instance(j).toString(i));
+                        numericColumns.Add(new List<string>());
+
+                        for (int j = 0; j < insts.numInstances(); j++)
+                        {
+                            numericColumns[numericColumns.Count - 1].Add(insts.instance(j).toString(i));
+                        }
                     }
                 }
-            }
 
-            weka.filters.unsupervised.attribute.Discretize myDiscretize = new weka.filters.unsupervised.attribute.Discretize();
-            myDiscretize.setInputFormat(insts);
-            myDiscretize.setFindNumBins(true);
-            insts = weka.filters.Filter.useFilter(insts, myDiscretize);
+                weka.filters.unsupervised.attribute.Discretize myDiscretize = new weka.filters.unsupervised.attribute.Discretize();
+                myDiscretize.setInputFormat(insts);
+                myDiscretize.setFindNumBins(true);
+                insts = weka.filters.Filter.useFilter(insts, myDiscretize);
 
-            List<List<string>> atrs = new List<List<string>>();
+                List<List<string>> atrs = new List<List<string>>();
 
-            for (int i = 0; i < insts.numAttributes(); i++)
-            {
-                atrs.Add(new List<string>());
-                for (int j = 0; j < insts.attribute(i).numValues(); j++)
+                for (int i = 0; i < insts.numAttributes(); i++)
                 {
-                    string sub_category = insts.attribute(i).value(j);
-                    string temp = sub_category.Replace("'", string.Empty);
-                    atrs[atrs.Count - 1].Add(temp);
+                    atrs.Add(new List<string>());
+                    for (int j = 0; j < insts.attribute(i).numValues(); j++)
+                    {
+                        string sub_category = insts.attribute(i).value(j);
+                        string temp = sub_category.Replace("'", string.Empty);
+                        atrs[atrs.Count - 1].Add(temp);
+                    }
+
+                    if (atrs[atrs.Count - 1].Count == 2)
+                        is2Categorical.Add(true);
+                    else
+                        is2Categorical.Add(false);
                 }
 
-                if (atrs[atrs.Count - 1].Count == 2)
-                    is2Categorical.Add(true);
-                else
-                    is2Categorical.Add(false);
-            }
+                List<List<string>> lst = new List<List<string>>();
 
-            List<List<string>> lst = new List<List<string>>();
-
-            for (int i = 0; i < insts.numInstances(); i++)
-            {
-                lst.Add(new List<string>());
-
-                for (int j = 0; j < insts.instance(i).numValues(); j++)
+                for (int i = 0; i < insts.numInstances(); i++)
                 {
-                    string temp = insts.instance(i).toString(j);
-                    temp = temp.Replace("\\", string.Empty);
-                    temp = temp.Replace("'", string.Empty);
-                    lst[lst.Count - 1].Add(temp);
+                    lst.Add(new List<string>());
+
+                    for (int j = 0; j < insts.instance(i).numValues(); j++)
+                    {
+                        string temp = insts.instance(i).toString(j);
+                        temp = temp.Replace("\\", string.Empty);
+                        temp = temp.Replace("'", string.Empty);
+                        lst[lst.Count - 1].Add(temp);
+                    }
                 }
+
+                List<string> targetValues = atrs[insts.numAttributes() - 1];
+
+                List<List<string>> giniDataset = ConvertToNumericWithGini(lst, atrs);
+                giniDataset = Arrange2CategoricalColumns(giniDataset, lst, is2Categorical);
+                giniDataset = ChangeBackNumericalColumns(giniDataset, numericColumns, isNumeric);
+                WriteFile(giniDataset, filename + "-numeric-gini.arff", atrNames, targetValues, isTargetNumeric);
+
+                List<List<string>> twoingDataset = ConvertToNumericWithTwoing(lst, atrs);
+                twoingDataset = Arrange2CategoricalColumns(twoingDataset, lst, is2Categorical);
+                twoingDataset = ChangeBackNumericalColumns(twoingDataset, numericColumns, isNumeric);
+                WriteFile(twoingDataset, filename + "-numeric-twoing.arff", atrNames, targetValues, isTargetNumeric);
+
+                return true;
             }
-
-            List<string> targetValues = atrs[insts.numAttributes() - 1];
-
-            List<List<string>> giniDataset = ConvertToNumericWithGini(lst, atrs);
-            giniDataset = Arrange2CategoricalColumns(giniDataset, lst, is2Categorical);
-            giniDataset = ChangeBackNumericalColumns(giniDataset, numericColumns, isNumeric);
-            WriteFile(giniDataset, "numeric_gini.arff", atrNames, targetValues, isTargetNumeric);
-
-            List<List<string>> twoingDataset = ConvertToNumericWithTwoing(lst, atrs);
-            twoingDataset = Arrange2CategoricalColumns(twoingDataset, lst, is2Categorical);
-            twoingDataset = ChangeBackNumericalColumns(twoingDataset, numericColumns, isNumeric);
-            WriteFile(twoingDataset, "numeric_twoing.arff", atrNames, targetValues, isTargetNumeric);
+            catch(Exception e)
+            {
+                return false;
+            }
         }
 
         public List<List<string>> ConvertToNumericWithGini(List<List<string>> lst, List<List<string>> atrs)
@@ -257,6 +279,7 @@ namespace WindowsFormsApp1
             return numericDataset;
         }
 
+        // some attributes can have just 2 categories, so those attributes can be converted to dummy attribute. no need to use gini or twoing index
         public List<List<string>> Arrange2CategoricalColumns(List<List<string>> numericDataset, List<List<string>> lst, List<bool> is2Categorical)
         {
 
@@ -278,6 +301,7 @@ namespace WindowsFormsApp1
             return numericDataset;
         }
 
+        // some attributes can already be numeric, so those attributes needs to be reamined same.
         public List<List<string>> ChangeBackNumericalColumns(List<List<string>> numericDataset, List<List<string>> numericColumns, List<bool> isNumeric)
         {
             int numericColumnIndex = 0;
@@ -306,9 +330,9 @@ namespace WindowsFormsApp1
             weka.core.Instances data;
             weka.core.FastVector atts = new weka.core.FastVector();
 
+            // fill and prepare the dataset for the arrf file
             for (int j = 0; j < insts.numAttributes(); j++)
             {
-
                 if (j == insts.numAttributes() - 1 && isTargetNumeric == false) // target value can be nominal
                     atts.addElement(new weka.core.Attribute(atrNames[j], targetVals));
                 else
@@ -335,9 +359,10 @@ namespace WindowsFormsApp1
             if (File.Exists(file)) 
                 File.Delete(file);
 
-            var saver = new weka.core.converters.ArffSaver();
+            var saver = new weka.core.converters.ArffSaver(); 
             saver.setInstances(data);
             saver.setFile(new java.io.File(file));
+            // files are saved into {AppFolder}/bin/Debug folder. You can find two files in this path.
             saver.writeBatch();
 
         }
